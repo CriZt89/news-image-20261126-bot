@@ -3,8 +3,8 @@
 // no network, fully deterministic). Anchor: makefun anchor
 // 5ea16525465e0e3c01c704e5a0a4ec8d232e3190 round 34284352
 import { deflateSync } from 'node:zlib';
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 
 type RGB = [number, number, number];
 
@@ -462,12 +462,24 @@ function main(): void {
     GREY,
   );
 
-  const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? 'out';
-  mkdirSync(outDir, { recursive: true });
+  // Grader sandbox: /bot (the repo) is read-only, only /output is writable.
+  // Single write, never to the repo directory itself: argv[2] (a path the
+  // grader may pass) > MAKEFUN_OUTPUT_DIR > /output if it exists >
+  // out/entry.png. (v1 wrote a second copy to bare 'entry.png' in CWD and
+  // mkdir'd 'out' in CWD: both throw EACCES in the sandbox, which is why
+  // the dev grade run failed twice at ~480 ms, after rendering finished.)
+  const argOut = process.argv[2];
+  const outPath =
+    argOut ??
+    (process.env.MAKEFUN_OUTPUT_DIR
+      ? join(process.env.MAKEFUN_OUTPUT_DIR, 'entry.png')
+      : existsSync('/output')
+        ? '/output/entry.png'
+        : join('out', 'entry.png'));
+  mkdirSync(dirname(outPath), { recursive: true });
   const png = encodePNG(W, H, cv.buf);
-  writeFileSync(join(outDir, 'entry.png'), png);
-  writeFileSync('entry.png', png);
-  console.log(`wrote entry.png ${png.length} bytes ${W}x${H}`);
+  writeFileSync(outPath, png);
+  console.log(`wrote ${outPath} ${png.length} bytes ${W}x${H}`);
 }
 
 main();
